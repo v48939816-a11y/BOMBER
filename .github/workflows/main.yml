@@ -12,30 +12,31 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install System Dependencies
+      - name: Install Dependencies
         run: |
           sudo apt update
-          sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
-          # Устанавливаем buildozer глобально, чтобы он точно был в PATH
+          # Заменил libtinfo5 на libtinfo6, так как в новой Ubuntu 24.04 пятой версии нет
+          sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev
+          pip install --upgrade pip
           pip install buildozer cython virtualenv
 
       - name: Build APK with Buildozer
         run: |
-          # Создаем конфиг
+          # Инициализируем конфиг
           buildozer init
           
-          # Настраиваем конфиг (исправляем пути и зависимости)
+          # Настраиваем параметры под твой проект
           sed -i 's/package.name = myapp/package.name = bombo4ka/' buildozer.spec
           sed -i 's/package.domain = org.test/package.domain = com.bombo4ka/' buildozer.spec
           sed -i 's/source.include_exts = py,png,jpg,kv,atlas/source.include_exts = py,png,html,json,txt,css,js/' buildozer.spec
           sed -i 's/source.main = main.py/source.main = bomber.py/' buildozer.spec
           
-          # Важно: если твой код использует requests или другие либы, добавь их сюда:
-          sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests/' buildozer.spec
+          # Если твой проект использует библиотеки (например, requests), раскомментируй строку ниже:
+          # sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests/' buildozer.spec
           
-          # Запуск сборки
-          buildozer -v android debug
-          
+          # Запуск сборки (это займет время)
+          yes | buildozer -v android debug
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
