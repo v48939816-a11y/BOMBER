@@ -4,9 +4,9 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-22.04
-    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Install System Dependencies
         run: |
@@ -16,27 +16,28 @@ jobs:
 
       - name: Build with Buildozer
         run: |
-          # Чистим старое
+          # 1. Очистка старых конфигов, чтобы не было конфликтов
           rm -f buildozer.spec
           /home/runner/.local/bin/buildozer init
           
-          # Фикс ошибки "Aidl not found" и настройка путей
+          # 2. Настройка параметров приложения
+          # ВНИМАНИЕ: Убедись, что твой главный файл в репозитории называется bomber.py
           sed -i 's/package.name = myapp/package.name = bombo4ka/' buildozer.spec
           sed -i 's/source.main = main.py/source.main = bomber.py/' buildozer.spec
           sed -i 's/source.include_exts = py,png,jpg,kv,atlas/source.include_exts = py,png,html,json,txt,css,js/' buildozer.spec
           
-          # ВАЖНО: Добавляем библиотеки, чтобы скрипт работал на Android
+          # Добавляем зависимости (requests и certifi нужны для работы интернета/запросов)
           sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests,urllib3,android,certifi/' buildozer.spec
           
-          # Авто-принятие лицензий (решает проблему зависания)
+          # ВКЛЮЧАЕМ АВТО-ПРИНЯТИЕ ЛИЦЕНЗИЙ (то, на чем он завис в прошлый раз)
           sed -i 's/# android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
           
-          # Прямое указание Buildozer использовать корректные пути SDK
-          export PATH=$PATH:$HOME/.local/bin
-          buildozer -v android debug
+          # 3. Запуск сборки
+          # Команда 'yes |' автоматически отвечает "да" на все вопросы Google SDK
+          yes | /home/runner/.local/bin/buildozer -v android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BOMBO4KA-App
+          name: BOMBO4KA-App-Ready
           path: bin/*.apk
