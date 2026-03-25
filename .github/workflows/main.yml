@@ -3,39 +3,47 @@ on: [push, workflow_dispatch]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Принудительно используем 22.04, где Buildozer работает идеально
+    runs-on: ubuntu-22.04
+    
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Install System Dependencies
         run: |
           sudo apt update
-          # Заменил libtinfo5 на libtinfo6, так как в новой Ubuntu 24.04 пятой версии нет
-          sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev
+          sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev libbz2-dev libsqlite3-dev openjdk-17-jdk
           pip install --upgrade pip
-          pip install buildozer cython virtualenv
+          pip install "buildozer==1.5.0" cython virtualenv  # Фиксируем версию Buildozer
 
       - name: Build APK with Buildozer
         run: |
-          # Инициализируем конфиг
+          # Полная очистка перед сборкой
+          rm -rf .buildozer
+          rm -f buildozer.spec
+          
+          # Инициализация нового конфига
           buildozer init
           
-          # Настраиваем параметры под твой проект
+          # Настройка параметров (ВНИМАНИЕ: здесь мы фиксируем рабочие версии)
           sed -i 's/package.name = myapp/package.name = bombo4ka/' buildozer.spec
           sed -i 's/package.domain = org.test/package.domain = com.bombo4ka/' buildozer.spec
           sed -i 's/source.include_exts = py,png,jpg,kv,atlas/source.include_exts = py,png,html,json,txt,css,js/' buildozer.spec
           sed -i 's/source.main = main.py/source.main = bomber.py/' buildozer.spec
           
-          # Если твой проект использует библиотеки (например, requests), раскомментируй строку ниже:
-          # sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests/' buildozer.spec
+          # Исправляем требования (добавляем requests, если нужно)
+          sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests,urllib3/' buildozer.spec
           
-          # Запуск сборки (это займет время)
-          yes | buildozer -v android debug
+          # Важно для стабильности на GitHub
+          sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
+          
+          # Запускаем сборку БЕЗ команды 'yes |', чтобы не вызвать 'Broken pipe'
+          buildozer -v android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
