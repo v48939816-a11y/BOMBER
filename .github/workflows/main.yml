@@ -4,8 +4,6 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
 
@@ -14,28 +12,30 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install System Dependencies
         run: |
           sudo apt update
           sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
-          pip install --user --upgrade buildozer cython virtualenv
+          # Устанавливаем buildozer глобально, чтобы он точно был в PATH
+          pip install buildozer cython virtualenv
 
       - name: Build APK with Buildozer
         run: |
           # Создаем конфиг
           buildozer init
           
-          # Настраиваем параметры под твой проект
+          # Настраиваем конфиг (исправляем пути и зависимости)
           sed -i 's/package.name = myapp/package.name = bombo4ka/' buildozer.spec
           sed -i 's/package.domain = org.test/package.domain = com.bombo4ka/' buildozer.spec
           sed -i 's/source.include_exts = py,png,jpg,kv,atlas/source.include_exts = py,png,html,json,txt,css,js/' buildozer.spec
-          
-          # Указываем твой главный файл bomber.py
           sed -i 's/source.main = main.py/source.main = bomber.py/' buildozer.spec
           
-          # Запуск сборки в тихом режиме (debug)
+          # Важно: если твой код использует requests или другие либы, добавь их сюда:
+          sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests/' buildozer.spec
+          
+          # Запуск сборки
           buildozer -v android debug
-
+          
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
