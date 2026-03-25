@@ -3,50 +3,40 @@ on: [push, workflow_dispatch]
 
 jobs:
   build:
-    # Принудительно используем 22.04, где Buildozer работает идеально
     runs-on: ubuntu-22.04
     
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
       - name: Install System Dependencies
         run: |
           sudo apt update
           sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev libbz2-dev libsqlite3-dev openjdk-17-jdk
-          pip install --upgrade pip
-          pip install "buildozer==1.5.0" cython virtualenv  # Фиксируем версию Buildozer
+          pip install --user --upgrade buildozer cython virtualenv
 
-      - name: Build APK with Buildozer
+      - name: Build with Buildozer
         run: |
-          # Полная очистка перед сборкой
-          rm -rf .buildozer
+          # Чистим старое
           rm -f buildozer.spec
+          /home/runner/.local/bin/buildozer init
           
-          # Инициализация нового конфига
-          buildozer init
-          
-          # Настройка параметров (ВНИМАНИЕ: здесь мы фиксируем рабочие версии)
+          # Фикс ошибки "Aidl not found" и настройка путей
           sed -i 's/package.name = myapp/package.name = bombo4ka/' buildozer.spec
-          sed -i 's/package.domain = org.test/package.domain = com.bombo4ka/' buildozer.spec
-          sed -i 's/source.include_exts = py,png,jpg,kv,atlas/source.include_exts = py,png,html,json,txt,css,js/' buildozer.spec
           sed -i 's/source.main = main.py/source.main = bomber.py/' buildozer.spec
+          sed -i 's/source.include_exts = py,png,jpg,kv,atlas/source.include_exts = py,png,html,json,txt,css,js/' buildozer.spec
           
-          # Исправляем требования (добавляем requests, если нужно)
-          sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests,urllib3/' buildozer.spec
+          # ВАЖНО: Добавляем библиотеки, чтобы скрипт работал на Android
+          sed -i 's/requirements = python3,kivy/requirements = python3,kivy,requests,urllib3,android,certifi/' buildozer.spec
           
-          # Важно для стабильности на GitHub
-          sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
+          # Авто-принятие лицензий (решает проблему зависания)
+          sed -i 's/# android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
           
-          # Запускаем сборку БЕЗ команды 'yes |', чтобы не вызвать 'Broken pipe'
+          # Прямое указание Buildozer использовать корректные пути SDK
+          export PATH=$PATH:$HOME/.local/bin
           buildozer -v android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BOMBO4KA-Android-App
+          name: BOMBO4KA-App
           path: bin/*.apk
