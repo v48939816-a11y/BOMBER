@@ -8,51 +8,49 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. Очистка места (критично для стабильности)
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-      # 2. Установка системных зависимостей (полный список)
-      - name: Install dependencies
+      - name: Install System Dependencies
         run: |
           sudo apt update
           sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev \
           libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev \
-          libbz2-dev libsqlite3-dev openjdk-17-jdk python3-pip python3-setuptools \
-          libltdl-dev
-          pip3 install --user --upgrade buildozer cython virtualenv
+          libbz2-dev libsqlite3-dev openjdk-17-jdk python3-setuptools
+          # Ставим строго рабочие версии
+          pip install --upgrade pip
+          pip install "cython<3.0" wheel "setuptools<69"
+          pip install buildozer
 
-      # 3. Настройка buildozer.spec
       - name: Configure Buildozer
         run: |
           rm -f buildozer.spec
-          /home/runner/.local/bin/buildozer init
-          # Основные настройки
+          buildozer init
+          
+          # Настройки имени и главного файла
           sed -i 's/package.name = myapp/package.name = bombo4ka/' buildozer.spec
           sed -i 's/source.main = main.py/source.main = bomber.py/' buildozer.spec
-          sed -i 's/source.include_exts = py,png,jpg,kv,atlas/source.include_exts = py,png,html,json,txt,css,js/' buildozer.spec
           
-          # Зависимости (убрали лишнее, добавили стабильные версии)
+          # Фикс требований (указываем версии, чтобы не было сюрпризов)
           sed -i 's/requirements = python3,kivy/requirements = python3,kivy==2.3.0,requests,certifi,urllib3,android/' buildozer.spec
           
-          # Настройки SDK и разрешений (важно для работы)
+          # Авто-лицензии и архитектура (оставляем только 64 бит для скорости и стабильности)
           sed -i 's/# android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
-          sed -i 's/# android.permissions = INTERNET/android.permissions = INTERNET/' buildozer.spec
-          
-          # Фикс для Ubuntu 22 (архитектура)
           sed -i 's/android.archs = arm64-v8a, armeabi-v7a/android.archs = arm64-v8a/' buildozer.spec
+          
+          # Повышаем API до 33 (требование Google Play и новых SDK)
+          sed -i 's/android.api = 31/android.api = 33/' buildozer.spec
 
-      # 4. Сборка с защитой от "зависаний"
-      - name: Build with Buildozer
+      - name: Build APK
         run: |
-          # Используем --profile для надежности
-          export APP_ANDROID_ACCEPT_SDK_LICENSE=1
-          /home/runner/.local/bin/buildozer -v android debug
+          # Используем команду без конвейера 'yes |', так как лицензия принята в .spec
+          buildozer -v android debug
         env:
-          CI: true
+          # Принудительно принимаем всё, что может спросить SDK
+          APP_ANDROID_ACCEPT_SDK_LICENSE: "1"
+          CI: "true"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
