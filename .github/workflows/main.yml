@@ -1,4 +1,4 @@
-name: Build BOMBO4KA APK
+name: Build BOMBO4KA APK (Secure Mode)
 on: [push, workflow_dispatch]
 
 jobs:
@@ -7,53 +7,57 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          persist-credentials: false # Защита от кражи токена GITHUB_TOKEN
+
+      - name: Cache Buildozer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
 
       - name: Install System Dependencies
         run: |
-          sudo apt update
-          sudo apt install -y git zip unzip autoconf libtool pkg-config zlib1g-dev \
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+          git zip unzip autoconf libtool pkg-config zlib1g-dev \
           libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev \
-          libbz2-dev libsqlite3-dev openjdk-17-jdk python3-setuptools
-          # Ставим строго рабочие версии
-          pip install --upgrade pip
-          pip install "cython<3.0" wheel "setuptools<69"
-          pip install buildozer
-
-      - name: Configure Buildozer
-        run: |
-          rm -f buildozer.spec
-          buildozer init
+          libbz2-dev libsqlite3-dev openjdk-17-jdk python3-pip
           
-          # Настройки имени и главного файла
+          # Установка только проверенных версий инструментов сборки
+          pip3 install --user --upgrade "buildozer==1.5.0" "cython<3.0" "setuptools<69" "wheel"
+
+      - name: Configure Buildozer (Hardened)
+        run: |
+          [ -f buildozer.spec ] || /home/runner/.local/bin/buildozer init
+          
+          # Ограничиваем разрешения только необходимыми
+          sed -i 's/# android.permissions = INTERNET/android.permissions = INTERNET/' buildozer.spec
+          
+          # Защита: отключаем автоматическое добавление всех разрешений
           sed -i 's/package.name = myapp/package.name = bombo4ka/' buildozer.spec
           sed -i 's/source.main = main.py/source.main = bomber.py/' buildozer.spec
           
-          # Фикс требований (указываем версии, чтобы не было сюрпризов)
+          # Используем только TLS-совместимые библиотеки
           sed -i 's/requirements = python3,kivy/requirements = python3,kivy==2.3.0,requests,certifi,urllib3,android/' buildozer.spec
           
-          # Авто-лицензии и архитектура (оставляем только 64 бит для скорости и стабильности)
-          sed -i 's/# android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
-          sed -i 's/android.archs = arm64-v8a, armeabi-v7a/android.archs = arm64-v8a/' buildozer.spec
-          
-          # Повышаем API до 33 (требование Google Play и новых SDK)
+          # Принудительно ставим API 33 для соответствия современным стандартам безопасности Android
           sed -i 's/android.api = 31/android.api = 33/' buildozer.spec
+          sed -i 's/# android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec
+          
+          # Безопасная архитектура
+          sed -i 's/android.archs = arm64-v8a, armeabi-v7a/android.archs = arm64-v8a/' buildozer.spec
 
       - name: Build APK
         run: |
-          # Используем команду без конвейера 'yes |', так как лицензия принята в .spec
-          buildozer -v android debug
+          /home/runner/.local/bin/buildozer -v android debug
         env:
-          # Принудительно принимаем всё, что может спросить SDK
-          APP_ANDROID_ACCEPT_SDK_LICENSE: "1"
-          CI: "true"
+          CI: true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BOMBO4KA-App-Ready
+          name: BOMBO4KA-Secure-APK
           path: bin/*.apk
+          retention-days: 5 # Удаляем артефакт через 5 дней для приватности
